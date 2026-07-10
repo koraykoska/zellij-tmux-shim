@@ -1,0 +1,22 @@
+# Rust build output
+/target
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local agent/tooling state (not part of the project)
+.omo/
+.codegraph
+
+# Python (qa/ harness)
+__pycache__/
+*.pyc
+
+# Logs / scratch
+*.log
