@@ -163,16 +163,18 @@ fn append_command(args: &mut Vec<String>, inv: &ParsedInvocation) {
 }
 
 fn append_split_command(args: &mut Vec<String>, inv: &ParsedInvocation) {
-    // zellij honors --cwd only for an explicit command, so when -c is given with
-    // no command, spawn the login shell explicitly so the pane starts in that dir.
-    let mut command: Vec<String> = inv.operands().to_vec();
-    if command.is_empty() && inv.value('c').is_some() {
-        command.push(env::login_shell());
-    }
-    let wrapped = env::wrap_command(&inv.values_of('e'), &command);
-    if !wrapped.is_empty() {
+    let operands = inv.operands();
+    if !operands.is_empty() {
         args.push("--".into());
-        args.extend(wrapped);
+        args.extend(env::wrap_command(&inv.values_of('e'), operands));
+        return;
+    }
+    // No command: when -c is given, spawn the login shell directly (a bare
+    // executable, not a shell string) so zellij's --cwd — applied only to an
+    // explicit command — takes effect and the pane opens in that directory.
+    if inv.value('c').is_some() {
+        args.push("--".into());
+        args.push(env::login_shell());
     }
 }
 
@@ -336,6 +338,49 @@ mod tests {
             ]
         );
         assert_eq!(call[7], crate::env::login_shell());
+    }
+
+    #[test]
+    fn split_window_single_string_command_runs_via_shell() {
+        let f = FakeRunner::ok("terminal_9\n");
+        handle(
+            &inv(&["split-window", "-h", "echo hello world"]),
+            &Client::new(&f),
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        let call = f.last_call();
+        assert_eq!(
+            &call[call.len() - 4..],
+            ["--", "/bin/sh", "-c", "echo hello world"]
+        );
+    }
+
+    #[test]
+    fn new_window_single_string_command_runs_via_shell() {
+        let panes = r#"[{"id":7,"is_plugin":false,"is_focused":true,"pane_x":0,"pane_y":0,
+            "pane_rows":24,"pane_columns":80,"tab_id":4,"tab_position":0}]"#;
+        let f = FakeRunner::routed(&[("new-tab", "4\n"), ("list-panes", panes)]);
+        handle(
+            &inv(&[
+                "new-window",
+                "-n",
+                "sub",
+                "opencode attach http://x --dir /p",
+            ]),
+            &Client::new(&f),
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        let new_tab = f
+            .all_calls()
+            .into_iter()
+            .find(|c| c.contains(&"new-tab".to_string()))
+            .unwrap();
+        assert_eq!(
+            &new_tab[new_tab.len() - 4..],
+            ["--", "/bin/sh", "-c", "opencode attach http://x --dir /p"]
+        );
     }
 
     #[test]

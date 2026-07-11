@@ -80,14 +80,24 @@ pub fn wrap_command(envs: &[&str], command: &[String]) -> Vec<String> {
     if command.is_empty() {
         return Vec::new();
     }
-    if envs.is_empty() {
+    let assignments = sh_assignments(envs);
+    // A single operand is a tmux shell-command STRING (e.g. `new-window 'agent
+    // --flag x'`). zellij execs the `--` args of new-pane/new-tab directly, so the
+    // string must be run through `/bin/sh -c` for the shell to word-split it —
+    // otherwise zellij treats the whole string as one executable name and fails
+    // with "command not found". This mirrors how tmux runs a shell-command.
+    if command.len() == 1 {
+        let script = if assignments.is_empty() {
+            command[0].clone()
+        } else {
+            format!("{assignments} {}", command[0])
+        };
+        return vec!["/bin/sh".to_string(), "-c".to_string(), script];
+    }
+    // Multiple operands are already-split argv; exec directly, injecting env if any.
+    if assignments.is_empty() {
         return command.to_vec();
     }
-    let assignments = envs
-        .iter()
-        .filter_map(|kv| sh_assignment(kv))
-        .collect::<Vec<_>>()
-        .join(" ");
     let mut out = vec![
         "/bin/sh".to_string(),
         "-c".to_string(),
@@ -96,6 +106,13 @@ pub fn wrap_command(envs: &[&str], command: &[String]) -> Vec<String> {
     ];
     out.extend(command.iter().cloned());
     out
+}
+
+fn sh_assignments(envs: &[&str]) -> String {
+    envs.iter()
+        .filter_map(|kv| sh_assignment(kv))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn sh_assignment(kv: &str) -> Option<String> {
@@ -176,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn wrap_command_injects_env_via_sh() {
+    fn wrap_command_multi_operand_injects_env_via_sh() {
         let cmd = vec!["opencode".to_string(), "attach".to_string()];
         let out = wrap_command(&["A=1", "B=two"], &cmd);
         assert_eq!(out[0], "/bin/sh");
@@ -186,15 +203,26 @@ mod tests {
     }
 
     #[test]
-    fn wrap_command_without_env_is_raw() {
-        let cmd = vec!["htop".to_string()];
+    fn wrap_command_multi_operand_without_env_is_raw() {
+        let cmd = vec!["touch".to_string(), "/tmp/x".to_string()];
         assert_eq!(wrap_command(&[], &cmd), cmd);
     }
 
     #[test]
-    fn wrap_command_skips_invalid_env_keys() {
-        let cmd = vec!["run".to_string()];
+    fn wrap_command_single_operand_runs_via_shell() {
+        // Regression: a single-string command must be run via `/bin/sh -c` so the
+        // shell word-splits it, else zellij execs the whole string as one binary.
+        let cmd = vec!["opencode attach http://x --dir /p".to_string()];
+        assert_eq!(
+            wrap_command(&[], &cmd),
+            ["/bin/sh", "-c", "opencode attach http://x --dir /p"]
+        );
+    }
+
+    #[test]
+    fn wrap_command_single_operand_prefixes_env() {
+        let cmd = vec!["run --now".to_string()];
         let out = wrap_command(&["OK=1", "bad key=2", "9NUM=3", "$(x)=4"], &cmd);
-        assert_eq!(out[2], "OK='1' exec \"$@\"");
+        assert_eq!(out, ["/bin/sh", "-c", "OK='1' run --now"]);
     }
 }
