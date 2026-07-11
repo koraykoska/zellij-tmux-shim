@@ -27,6 +27,17 @@ pub fn current_pane_int() -> Option<i64> {
         .and_then(|v| crate::idmap::pane_int_from_env(&v))
 }
 
+/// The user's login shell (`$SHELL`). zellij honors `new-pane --cwd` only for an
+/// explicit command, not the bare default shell, so `split-window -c DIR` with no
+/// command must spawn this shell explicitly to actually start the pane in DIR.
+#[must_use]
+pub fn login_shell() -> String {
+    std::env::var("SHELL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "/bin/sh".to_string())
+}
+
 #[must_use]
 pub fn self_dir() -> Option<PathBuf> {
     std::env::current_exe()

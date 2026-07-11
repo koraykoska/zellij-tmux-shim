@@ -183,6 +183,13 @@ impl<'r> Client<'r> {
         self.action(&args)
     }
 
+    pub fn toggle_fullscreen(&self, pane_id: &str) -> Result<()> {
+        // Best-effort focus: zellij errors when a pane is already focused, which is
+        // harmless here — the goal is only to make pane_id the fullscreen target.
+        let _ = self.action(&["focus-pane-id", pane_id]);
+        self.action(&["toggle-fullscreen"])
+    }
+
     pub fn dump_screen_full(&self, pane_id: &str) -> Result<String> {
         let out = self
             .runner
@@ -200,6 +207,14 @@ impl<'r> Client<'r> {
                 out.stdout.trim()
             ))
         })
+    }
+
+    pub fn new_pane_in_place(&self, command: &[&str]) -> Result<()> {
+        // --in-place replaces the focused pane and, unlike a normal new-pane,
+        // prints no terminal id — so this checks success without parsing an id.
+        let mut args = vec!["new-pane", "--in-place", "--close-replaced-pane"];
+        args.extend_from_slice(command);
+        self.action(&args)
     }
 
     pub fn new_tab(&self, extra: &[&str]) -> Result<i64> {

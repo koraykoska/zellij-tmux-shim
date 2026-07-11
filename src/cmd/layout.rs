@@ -1,9 +1,8 @@
 //! Layout and option handlers.
 //!
-//! zellij's tiling model and relative-only resize cannot honor tmux's absolute
-//! layout/resize/option requests, so these are accepted (exit 0) as no-ops.
-//! Agent tools re-query live geometry afterward and adapt, so succeeding here
-//! while reporting true geometry from the query handlers keeps them working.
+//! zellij auto-tiles, so tmux's `select-layout` and pane/window options have no
+//! zellij equivalent and are accepted (exit 0) as no-ops. `resize-pane` IS
+//! implemented (see `super::resize`), mapped onto zellij's relative resize.
 
 use super::{Ctx, Output};
 use crate::cli::args::ParsedInvocation;
@@ -11,7 +10,7 @@ use crate::error::{Result, ShimError};
 
 pub fn handle(inv: &ParsedInvocation, _ctx: &Ctx) -> Result<Output> {
     match inv.subcommand.as_str() {
-        "select-layout" | "set-option" | "set-window-option" | "resize-pane" => Ok(Output::ok()),
+        "select-layout" | "set-option" | "set-window-option" => Ok(Output::ok()),
         other => Err(ShimError::BadArgs(format!(
             "layout: unhandled command {other}"
         ))),
@@ -30,12 +29,7 @@ mod tests {
 
     #[test]
     fn layout_and_option_commands_are_noop_exit0() {
-        for cmd in [
-            "select-layout",
-            "set-option",
-            "set-window-option",
-            "resize-pane",
-        ] {
+        for cmd in ["select-layout", "set-option", "set-window-option"] {
             let out = handle(&inv(&[cmd, "-t", "%1"]), &Ctx::test("s")).unwrap();
             assert_eq!(out.code, 0);
             assert!(out.stdout.is_empty() && out.stderr.is_empty());

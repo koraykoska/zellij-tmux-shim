@@ -15,8 +15,8 @@ pub fn handle(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Outp
         "list-panes" => list_panes(inv, client, ctx),
         "list-windows" => list_windows(inv, client, ctx),
         "list-sessions" => list_sessions(inv, client, ctx),
-        "has-session" => has_session(inv, client),
-        "capture-pane" => capture_pane(inv, client),
+        "has-session" => has_session(inv, client, ctx),
+        "capture-pane" => capture_pane(inv, client, ctx),
         other => Err(ShimError::BadArgs(format!(
             "query: unhandled command {other}"
         ))),
@@ -38,7 +38,7 @@ fn display_message(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result
     };
     let panes = client.list_panes()?;
     let tabs = client.list_tabs()?;
-    let pane = resolve_pane(inv, &panes)
+    let pane = resolve_pane(inv, &panes, ctx.current_pane)
         .ok_or_else(|| ShimError::NoSuchPane(inv.value('t').unwrap_or_default().to_string()))?;
     let tab = types::tab_by_id(&tabs, pane.tab_id)
         .or_else(|| types::active_tab(&tabs))
@@ -58,7 +58,7 @@ fn list_panes(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Outp
     let mut selected: Vec<&PaneInfo> = if inv.has('a') || inv.has('s') {
         types::terminal_panes(&panes)
     } else {
-        let tab_id = resolve_tab_id(inv, &tabs, &panes);
+        let tab_id = resolve_tab_id(inv, &tabs, &panes, ctx.current_pane);
         types::terminal_panes(&panes)
             .into_iter()
             .filter(|p| Some(p.tab_id) == tab_id)
@@ -80,6 +80,7 @@ fn list_panes(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Outp
 fn list_windows(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Output> {
     let format = format_of(inv, "#{window_index}: #{window_name}");
     let tabs = client.list_tabs()?;
+    let panes = client.list_panes()?;
     let selected: Vec<&TabInfo> = match inv.value('t') {
         Some(session) => {
             let scoped: Vec<&TabInfo> = tabs
@@ -96,7 +97,7 @@ fn list_windows(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Ou
     };
     let lines: Vec<String> = selected
         .into_iter()
-        .map(|t| render::render(format, &context::build_window(t, &ctx.session)))
+        .map(|t| render::render(format, &context::build_window(t, &panes, &ctx.session)))
         .collect();
     Ok(Output::lines(&lines))
 }
@@ -119,11 +120,14 @@ fn list_sessions(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<O
     Ok(Output::lines(&lines))
 }
 
-fn has_session(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
+fn has_session(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Output> {
     let Some(target) = inv.value('t') else {
         // No target means the current session, which always exists inside zellij.
         return Ok(Output::ok());
     };
+    if target == ctx.session {
+        return Ok(Output::ok());
+    }
     let tabs = client.list_tabs()?;
     if tabs.iter().any(|t| idmap::is_session_tab(target, &t.name)) {
         Ok(Output::ok())
@@ -135,9 +139,9 @@ fn has_session(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
     }
 }
 
-fn capture_pane(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
+fn capture_pane(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Output> {
     let panes = client.list_panes()?;
-    let pane = resolve_pane(inv, &panes)
+    let pane = resolve_pane(inv, &panes, ctx.current_pane)
         .ok_or_else(|| ShimError::NoSuchPane(inv.value('t').unwrap_or_default().to_string()))?;
     let content = client.dump_screen_full(&format!("terminal_{}", pane.id))?;
     let out = match inv.value('S') {
@@ -147,7 +151,11 @@ fn capture_pane(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
     Ok(Output::bytes(out.into_bytes()))
 }
 
-fn resolve_pane<'a>(inv: &ParsedInvocation, panes: &'a [PaneInfo]) -> Option<&'a PaneInfo> {
+fn resolve_pane<'a>(
+    inv: &ParsedInvocation,
+    panes: &'a [PaneInfo],
+    caller: Option<i64>,
+) -> Option<&'a PaneInfo> {
     if let Some(target) = inv.value('t') {
         if let Some(id) = idmap::pane_int_from_env(target) {
             if let Some(pane) = types::pane_by_terminal_id(panes, id) {
@@ -155,10 +163,20 @@ fn resolve_pane<'a>(inv: &ParsedInvocation, panes: &'a [PaneInfo]) -> Option<&'a
             }
         }
     }
+    // With no -t, tmux reports the pane the command runs in ($TMUX_PANE); prefer
+    // the caller's own pane, falling back to the focused terminal.
+    if let Some(pane) = caller.and_then(|id| types::pane_by_terminal_id(panes, id)) {
+        return Some(pane);
+    }
     types::active_terminal(panes)
 }
 
-fn resolve_tab_id(inv: &ParsedInvocation, tabs: &[TabInfo], panes: &[PaneInfo]) -> Option<i64> {
+fn resolve_tab_id(
+    inv: &ParsedInvocation,
+    tabs: &[TabInfo],
+    panes: &[PaneInfo],
+    caller: Option<i64>,
+) -> Option<i64> {
     if let Some(target) = inv.value('t') {
         if let Ok(tab_id) = idmap::zellij_tab_from_window(target) {
             if types::tab_by_id(tabs, tab_id).is_some() {
@@ -170,6 +188,9 @@ fn resolve_tab_id(inv: &ParsedInvocation, tabs: &[TabInfo], panes: &[PaneInfo]) 
                 return Some(pane.tab_id);
             }
         }
+    }
+    if let Some(pane) = caller.and_then(|id| types::pane_by_terminal_id(panes, id)) {
+        return Some(pane.tab_id);
     }
     types::active_tab(tabs).map(|t| t.tab_id)
 }
@@ -234,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn display_uses_active_terminal_when_untargeted() {
+    fn display_falls_back_to_active_terminal_without_caller() {
         let f = fake();
         let c = Client::new(&f);
         let out = handle(
@@ -243,8 +264,22 @@ mod tests {
             &Ctx::test("s"),
         )
         .unwrap();
-        // active terminal (not the focused plugin) is the vim pane
+        // no -t and no caller pane: falls back to the focused terminal (vim)
         assert_eq!(out.stdout, b"vim\n");
+    }
+
+    #[test]
+    fn display_prefers_caller_pane_when_untargeted() {
+        let f = fake();
+        let c = Client::new(&f);
+        let out = handle(
+            &inv(&["display-message", "-p", "-F", "#{pane_current_command}"]),
+            &c,
+            &Ctx::test_pane("s", 1),
+        )
+        .unwrap();
+        // caller is terminal_1 (zsh) — matches tmux's $TMUX_PANE behavior
+        assert_eq!(out.stdout, b"zsh\n");
     }
 
     #[test]
@@ -258,6 +293,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out.stdout, b"%0\n%1\n");
+    }
+
+    #[test]
+    fn list_windows_counts_panes_per_tab() {
+        let f = fake();
+        let c = Client::new(&f);
+        let out = handle(
+            &inv(&["list-windows", "-F", "#{window_id}:#{window_panes}"]),
+            &c,
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        assert_eq!(out.stdout, b"@0:2\n@1:0\n");
     }
 
     #[test]
@@ -278,6 +326,18 @@ mod tests {
         .unwrap();
         assert_eq!(absent.code, 1);
         assert_eq!(absent.stderr, b"can't find session: nope\n");
+    }
+
+    #[test]
+    fn has_session_matches_base_session_name() {
+        let out = handle(
+            &inv(&["has-session", "-t", "base"]),
+            &Client::new(&fake()),
+            &Ctx::test("base"),
+        )
+        .unwrap();
+        assert_eq!(out.code, 0);
+        assert!(out.stderr.is_empty());
     }
 
     #[test]

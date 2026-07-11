@@ -39,7 +39,7 @@ fn split_window(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Ou
         args.push("--cwd".into());
         args.push(cwd.to_string());
     }
-    append_command(&mut args, inv);
+    append_split_command(&mut args, inv);
     let pane_id = client.new_pane(&as_refs(&args))?;
     print_created(inv, client, ctx, pane_id)
 }
@@ -96,7 +96,17 @@ fn kill_pane(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
     let target = inv
         .value('t')
         .ok_or_else(|| ShimError::BadArgs("kill-pane requires -t".into()))?;
-    client.close_pane(&idmap::zellij_pane_target(target)?)?;
+    let zellij_id = idmap::zellij_pane_target(target)?;
+    // tmux exits 1 with "can't find pane" for a missing target; match that.
+    if let Some(id) = idmap::pane_int_from_env(target) {
+        if types::pane_by_terminal_id(&client.list_panes()?, id).is_none() {
+            return Ok(Output::stderr_line(
+                &format!("can't find pane: {target}"),
+                1,
+            ));
+        }
+    }
+    client.close_pane(&zellij_id)?;
     Ok(Output::ok())
 }
 
@@ -124,10 +134,23 @@ fn respawn_pane(inv: &ParsedInvocation, client: &Client) -> Result<Output> {
     let target = inv
         .value('t')
         .ok_or_else(|| ShimError::BadArgs("respawn-pane requires -t".into()))?;
-    client.close_pane(&idmap::zellij_pane_target(target)?)?;
-    let mut args: Vec<String> = Vec::new();
-    append_command(&mut args, inv);
-    client.new_pane(&as_refs(&args))?;
+    let zellij_id = idmap::zellij_pane_target(target)?;
+    if let Some(id) = idmap::pane_int_from_env(target) {
+        if types::pane_by_terminal_id(&client.list_panes()?, id).is_none() {
+            return Ok(Output::stderr_line(
+                &format!("can't find pane: {target}"),
+                1,
+            ));
+        }
+    }
+    // zellij cannot restart a pane's process in place, so replace the pane at its
+    // current position via new_pane_in_place. The pane id necessarily changes —
+    // zellij allocates a fresh terminal id. Best-effort focus: --in-place acts on
+    // the focused pane, and re-focusing an already-focused target errors harmlessly.
+    let _ = client.focus_pane(&zellij_id);
+    let mut command: Vec<String> = Vec::new();
+    append_command(&mut command, inv);
+    client.new_pane_in_place(&as_refs(&command))?;
     Ok(Output::ok())
 }
 
@@ -136,6 +159,20 @@ fn append_command(args: &mut Vec<String>, inv: &ParsedInvocation) {
     if !command.is_empty() {
         args.push("--".into());
         args.extend(command);
+    }
+}
+
+fn append_split_command(args: &mut Vec<String>, inv: &ParsedInvocation) {
+    // zellij honors --cwd only for an explicit command, so when -c is given with
+    // no command, spawn the login shell explicitly so the pane starts in that dir.
+    let mut command: Vec<String> = inv.operands().to_vec();
+    if command.is_empty() && inv.value('c').is_some() {
+        command.push(env::login_shell());
+    }
+    let wrapped = env::wrap_command(&inv.values_of('e'), &command);
+    if !wrapped.is_empty() {
+        args.push("--".into());
+        args.extend(wrapped);
     }
 }
 
@@ -269,6 +306,39 @@ mod tests {
     }
 
     #[test]
+    fn split_window_cwd_without_command_spawns_login_shell() {
+        let f = FakeRunner::ok("terminal_4\n");
+        handle(
+            &inv(&[
+                "split-window",
+                "-h",
+                "-c",
+                "/work",
+                "-P",
+                "-F",
+                "#{pane_id}",
+            ]),
+            &Client::new(&f),
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        let call = f.last_call();
+        assert_eq!(
+            &call[..7],
+            [
+                "action",
+                "new-pane",
+                "--direction",
+                "right",
+                "--cwd",
+                "/work",
+                "--"
+            ]
+        );
+        assert_eq!(call[7], crate::env::login_shell());
+    }
+
+    #[test]
     fn split_window_focuses_target_before_directional_split() {
         let f = FakeRunner::ok("terminal_7\n");
         handle(
@@ -299,7 +369,9 @@ mod tests {
 
     #[test]
     fn kill_pane_and_select_window_target_correctly() {
-        let f = FakeRunner::ok("");
+        let panes = r#"[{"id":3,"is_plugin":false,"is_focused":true,"pane_x":0,"pane_y":0,
+            "pane_rows":24,"pane_columns":80,"tab_id":0,"tab_position":0}]"#;
+        let f = FakeRunner::routed(&[("list-panes", panes), ("close-pane", "")]);
         handle(
             &inv(&["kill-pane", "-t", "%3"]),
             &Client::new(&f),
@@ -319,6 +391,48 @@ mod tests {
         )
         .unwrap();
         assert_eq!(g.last_call(), ["action", "go-to-tab-by-id", "4"]);
+    }
+
+    #[test]
+    fn kill_pane_missing_target_exits_1() {
+        let panes = r#"[{"id":0,"is_plugin":false,"is_focused":true,"pane_x":0,"pane_y":0,
+            "pane_rows":24,"pane_columns":80,"tab_id":0,"tab_position":0}]"#;
+        let f = FakeRunner::routed(&[("list-panes", panes)]);
+        let out = handle(
+            &inv(&["kill-pane", "-t", "%9"]),
+            &Client::new(&f),
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        assert_eq!(out.code, 1);
+        assert_eq!(out.stderr, b"can't find pane: %9\n");
+    }
+
+    #[test]
+    fn respawn_pane_replaces_in_place() {
+        let panes = r#"[{"id":3,"is_plugin":false,"is_focused":true,"pane_x":0,"pane_y":0,
+            "pane_rows":24,"pane_columns":80,"tab_id":0,"tab_position":0}]"#;
+        let f = FakeRunner::routed(&[
+            ("list-panes", panes),
+            ("focus-pane-id", ""),
+            ("new-pane", "terminal_8\n"),
+        ]);
+        handle(
+            &inv(&["respawn-pane", "-t", "%3"]),
+            &Client::new(&f),
+            &Ctx::test("s"),
+        )
+        .unwrap();
+        let calls = f.all_calls();
+        assert!(calls
+            .iter()
+            .any(|c| c == &["action", "focus-pane-id", "terminal_3"]));
+        let new_pane = calls
+            .iter()
+            .find(|c| c.contains(&"new-pane".to_string()))
+            .unwrap();
+        assert!(new_pane.contains(&"--in-place".to_string()));
+        assert!(new_pane.contains(&"--close-replaced-pane".to_string()));
     }
 
     #[test]

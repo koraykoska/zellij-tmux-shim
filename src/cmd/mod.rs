@@ -6,6 +6,7 @@ pub mod keys;
 pub mod layout;
 pub mod lifecycle;
 pub mod query;
+pub mod resize;
 pub mod router;
 
 pub struct Output {
@@ -72,6 +73,7 @@ impl Output {
 
 pub struct Ctx {
     pub session: String,
+    pub current_pane: Option<i64>,
 }
 
 impl Ctx {
@@ -79,6 +81,7 @@ impl Ctx {
     pub fn from_env() -> Self {
         Self {
             session: crate::env::session_name().unwrap_or_else(|| "zellij".to_string()),
+            current_pane: crate::env::current_pane_int(),
         }
     }
 
@@ -86,6 +89,15 @@ impl Ctx {
     pub fn test(session: &str) -> Self {
         Self {
             session: session.to_string(),
+            current_pane: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn test_pane(session: &str, current_pane: i64) -> Self {
+        Self {
+            session: session.to_string(),
+            current_pane: Some(current_pane),
         }
     }
 }

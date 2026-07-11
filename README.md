@@ -236,12 +236,12 @@ tmux kill-pane -t %3
 | `send-keys` | Supported | `-t` targets pane. `-l` disables key-name translation. Translates `Enter`, `C-c`, `Tab`, `Escape`, `Space`, `BSpace`, `C-<letter>`. |
 | `select-pane` | Supported | `-t` targets pane for focus. `-T` renames the pane without stealing focus (agents use this to label just-created panes). |
 
-### Layout and options (accepted as no-ops)
+### Layout, resize, and options
 
 | Command | Status | Notes |
 |---|---|---|
+| `resize-pane` | Supported | Mapped onto zellij's relative resize. `-x`/`-y` (absolute cells or `N%`) converge toward the target in zellij's coarse steps; `-L`/`-R`/`-U`/`-D [N]` grow/shrink; `-Z` toggles zoom (fullscreen). Not cell-exact -- zellij resizes in ~5% increments, so the shim steps as close as it can. |
 | `select-layout` | No-op | zellij auto-tiles; layout commands succeed with exit 0. Agents re-query geometry afterward and adapt. |
-| `resize-pane` | No-op | zellij's relative-only resize cannot honor tmux's absolute dimensions. |
 | `set-option` / `set-window-option` | No-op | Custom pane options not persisted in v1. |
 
 ### Other no-ops
@@ -329,7 +329,7 @@ TMUX_SHIM_TIMEOUT=10 tmux list-panes
 
 ## Limitations
 
-- **Layout and resize are no-ops.** zellij auto-tiles its pane layout; it cannot honor tmux's `select-layout` or absolute `resize-pane` dimensions. The shim accepts these commands (exit 0) so agent workflows don't break. Agents that re-query live geometry after laying out will work correctly -- the query commands always return accurate current dimensions.
+- **`select-layout` is a no-op; `resize-pane` is approximate.** zellij auto-tiles, so `select-layout` is accepted (exit 0) as a no-op. `resize-pane` IS mapped onto zellij's relative resize, but because zellij resizes in coarse (~5%) steps, absolute `-x`/`-y` targets are approached as closely as possible rather than landing on an exact cell count. Agents that re-query live geometry afterward always get accurate current dimensions.
 - **Custom pane options are not persisted.** `set-option -p @my-var value` and `set-window-option` are accepted but discarded. This is a v1 limitation; pane-level key-value storage requires zellij plugin infrastructure.
 - **macOS first, Linux works.** The project is developed and verified on macOS with zsh. Linux with bash/zsh should work identically. Windows (including WSL) is not tested and not a v1 target.
 - **zellij 0.44.x required.** The JSON format of `zellij action list-panes --json` changed across zellij versions. 0.44.3 is the tested version.

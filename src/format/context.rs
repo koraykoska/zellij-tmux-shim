@@ -50,10 +50,14 @@ pub fn build(
 }
 
 #[must_use]
-pub fn build_window(tab: &TabInfo, session: &str) -> FormatContext {
+pub fn build_window(tab: &TabInfo, all_panes: &[PaneInfo], session: &str) -> FormatContext {
+    let window_panes = all_panes
+        .iter()
+        .filter(|p| !p.is_plugin && p.tab_id == tab.tab_id)
+        .count();
     let mut vars: HashMap<&'static str, String> = HashMap::new();
     insert_session(&mut vars, session);
-    insert_window(&mut vars, tab, 0);
+    insert_window(&mut vars, tab, window_panes);
     FormatContext { vars }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "zellij-tmux-shim"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.74"
 description = "A tmux CLI compatibility shim that translates tmux commands into zellij, so tmux-expecting tools and AI agents (opencode, oh-my-openagent, cmux-style subagent spawners) run transparently inside a zellij session."

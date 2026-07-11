@@ -1,6 +1,6 @@
 //! Dispatches a parsed tmux invocation to the handler that implements it.
 
-use super::{control, keys, layout, lifecycle, query, Ctx, Output};
+use super::{control, keys, layout, lifecycle, query, resize, Ctx, Output};
 use crate::cli::args::ParsedInvocation;
 use crate::error::Result;
 use crate::zellij::client::{Client, RealRunner};
@@ -27,9 +27,8 @@ fn route(inv: &ParsedInvocation, client: &Client, ctx: &Ctx) -> Result<Output> {
             lifecycle::handle(inv, client, ctx)
         }
         "send-keys" | "select-pane" => keys::handle(inv, client, ctx),
-        "select-layout" | "set-option" | "set-window-option" | "resize-pane" => {
-            layout::handle(inv, ctx)
-        }
+        "resize-pane" => resize::handle(inv, client, ctx),
+        "select-layout" | "set-option" | "set-window-option" => layout::handle(inv, ctx),
         other => Ok(Output::stderr_line(&format!("unknown command: {other}"), 1)),
     }
 }
