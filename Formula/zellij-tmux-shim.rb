@@ -14,18 +14,18 @@ class ZellijTmuxShim < Formula
   on_macos do
     on_arm do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-aarch64-apple-darwin.tar.gz"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "faf0276468a40046243ccb30628e6280cf47a686a88f2d380cb57e9d45858831"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "3a515ede858a552677fa49aafe072c39c215638309fc9126d6e0f2defc0e7d25"
     end
     on_intel do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "79aede34e2386aaa3624e9cafd7bc37dd00b2e49dfb877985d87557e096afdae"
     end
   end
 
