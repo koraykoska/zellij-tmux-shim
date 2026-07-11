@@ -16,7 +16,7 @@ It is purpose-built for **AI coding agents** that spawn sub-agents into tmux pan
 
 ### The problem
 
-AI coding agents like [opencode](https://github.com/sst/opencode), [OhMyOpenCode](https://github.com/code-yeongyu/oh-my-openagent), and [cmux](https://github.com/manaflow-ai/cmux) automate multi-agent workflows by spawning sub-agents into terminal multiplexer panes. They call `tmux split-window`, query `#{pane_width}` and `#{pane_height}` to build a grid, and send keystrokes with `tmux send-keys`. But they are hardcoded to talk to **tmux**.
+AI coding agents like [opencode](https://github.com/sst/opencode) and [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) automate multi-agent workflows by spawning sub-agents into terminal multiplexer panes. They call `tmux split-window`, query `#{pane_width}` and `#{pane_height}` to build a grid, and send keystrokes with `tmux send-keys`. But they are hardcoded to talk to **tmux**.
 
 If your daily driver is [zellij](https://zellij.dev), you face a choice: give up zellij's modern terminal workspace, or give up the AI agent's multi-pane orchestration. Neither is good.
 
@@ -27,13 +27,12 @@ If your daily driver is [zellij](https://zellij.dev), you face a choice: give up
 ### Who this is for
 
 - **opencode users** who want sub-agents to land in zellij panes instead of tmux panes.
-- **OhMyOpenCode users** running the same pattern.
+- **oh-my-openagent users** running the same pattern.
 - **Any developer** using a tool that shells out to `tmux` for pane management -- CI orchestrators, terminal-based dashboards, dev-environment launchers -- who prefers zellij's UI, floating panes, and native session management.
-- **cmux users** curious about zellij: cmux ships its own tmux shim for its own multiplexer; `zellij-tmux-shim` does the same job for zellij.
 
 ### Status
 
-The shim is early but functional. The core opencode and OhMyOpenCode sub-agent workflows (split, query geometry, send keys, read output, kill panes) are implemented and verified against zellij 0.44.3 on macOS. Additional tmux commands and broader platform support are tracked in the project plan.
+The shim is early but functional. The core opencode and oh-my-openagent sub-agent workflows (split, query geometry, send keys, read output, kill panes) are implemented and verified against zellij 0.44.3 on macOS. Additional tmux commands and broader platform support are tracked in the project plan.
 
 ---
 
@@ -54,7 +53,7 @@ The shim is early but functional. The core opencode and OhMyOpenCode sub-agent w
 ### Architecture
 
 ```
-Tool (opencode / OhMyOpenCode / cmux)
+Tool (opencode / oh-my-openagent)
     |
     v
   `tmux split-window -h -P -F '#{pane_id}'`
@@ -169,7 +168,7 @@ opencode
 # opencode spawns sub-agents into zellij panes automatically
 ```
 
-**OhMyOpenCode:**
+**oh-my-openagent:**
 
 ```bash
 # Inside a zellij session
@@ -333,15 +332,11 @@ TMUX_SHIM_TIMEOUT=10 tmux list-panes
 - **Custom pane options are not persisted.** `set-option -p @my-var value` and `set-window-option` are accepted but discarded. This is a v1 limitation; pane-level key-value storage requires zellij plugin infrastructure.
 - **macOS first, Linux works.** The project is developed and verified on macOS with zsh. Linux with bash/zsh should work identically. Windows (including WSL) is not tested and not a v1 target.
 - **zellij 0.44.x required.** The JSON format of `zellij action list-panes --json` changed across zellij versions. 0.44.3 is the tested version.
-- **Not all tmux commands are implemented.** The shim covers the commands used by opencode, OhMyOpenCode, and cmux-style orchestrators. Advanced or rarely-used tmux commands (`choose-tree`, `command-prompt`, `confirm-before`, `pipe-pane`, `break-pane`, `join-pane`, `swap-pane`, copy-mode commands, etc.) are not implemented. Running an unimplemented command prints an error to stderr and exits 1.
+- **Not all tmux commands are implemented.** The shim covers the commands used by opencode and oh-my-openagent. Advanced or rarely-used tmux commands (`choose-tree`, `command-prompt`, `confirm-before`, `pipe-pane`, `break-pane`, `join-pane`, `swap-pane`, copy-mode commands, etc.) are not implemented. Running an unimplemented command prints an error to stderr and exits 1.
 
 ---
 
 ## How it compares
-
-### vs cmux
-
-[cmux](https://github.com/manaflow-ai/cmux) ships a tmux shim as part of its own terminal multiplexer, so cmux itself can run tools that expect tmux. `zellij-tmux-shim` does the same job for zellij: it translates tmux commands so that tools expecting tmux work inside zellij. The two projects solve the same class of problem for different multiplexer backends. If you use cmux, use its built-in shim. If you use zellij, use `zellij-tmux-shim`.
 
 ### vs running real tmux inside zellij
 

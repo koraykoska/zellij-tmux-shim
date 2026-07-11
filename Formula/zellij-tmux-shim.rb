@@ -47,7 +47,7 @@ class ZellijTmuxShim < Formula
         source "#{opt_pkgshare}/zellij-tmux-shim.sh"
 
       Then restart your shell, start zellij, and launch your AI agent
-      (opencode / OhMyOpenCode). Verify inside zellij:  tmux -V   # -> tmux 3.4
+      (opencode / oh-my-openagent). Verify inside zellij:  tmux -V   # -> tmux 3.4
     EOS
   end
 
