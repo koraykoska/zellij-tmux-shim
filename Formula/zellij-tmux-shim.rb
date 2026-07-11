@@ -1,7 +1,7 @@
 class ZellijTmuxShim < Formula
   desc "tmux CLI compatibility shim that translates tmux commands to zellij"
   homepage "https://github.com/koraykoska/zellij-tmux-shim"
-  version "0.1.1"
+  version "0.1.2"
   license "MIT"
 
   livecheck do
@@ -14,18 +14,18 @@ class ZellijTmuxShim < Formula
   on_macos do
     on_arm do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-aarch64-apple-darwin.tar.gz"
-      sha256 "8de8ba5cf6f288b0045a440e6e82abbb8863ce5df3b29088dc86f97f2c6e0463"
+      sha256 "e8d1fc098375170c6216023104d24434bbb3b63384d725514be7c1916930fc3b"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "a579854ea2b4b82b56766fc4a3aeffa3e94f8bc8097842debafc3bab8b327aa6"
+      sha256 "de80128ace15fa0775bef394ffdb00fd39ccd69cc8764c91a26ee1f640c48181"
     end
     on_intel do
       url "https://github.com/koraykoska/zellij-tmux-shim/releases/download/v#{version}/zellij-tmux-shim-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "40ff780ef28e4221e249edf32f242cebbb2b13f547008f05d48da896a1e4b182"
+      sha256 "e69f999fab97cf93765fa68a2c05071d90353705e87ab522e35dfc009d9f2fbc"
     end
   end
 
