@@ -5,6 +5,36 @@ use crate::cli::args::ParsedInvocation;
 use crate::error::Result;
 use crate::zellij::client::{Client, RealRunner};
 
+/// The set of subcommands [`route`] implements. Used as an unknown-command
+/// guard BEFORE session resolution so unknown/version/noop never spawn `zellij`.
+#[must_use]
+fn is_known_subcommand(name: &str) -> bool {
+    matches!(
+        name,
+        "display-message"
+            | "list-panes"
+            | "list-windows"
+            | "list-sessions"
+            | "has-session"
+            | "capture-pane"
+            | "split-window"
+            | "new-session"
+            | "new-window"
+            | "select-window"
+            | "rename-window"
+            | "kill-pane"
+            | "kill-window"
+            | "kill-session"
+            | "respawn-pane"
+            | "send-keys"
+            | "select-pane"
+            | "resize-pane"
+            | "select-layout"
+            | "set-option"
+            | "set-window-option"
+    )
+}
+
 pub fn dispatch(inv: &ParsedInvocation) -> Result<Output> {
     if control::is_version(inv) {
         return Ok(control::version());
@@ -12,9 +42,16 @@ pub fn dispatch(inv: &ParsedInvocation) -> Result<Output> {
     if control::is_noop(inv) {
         return Ok(control::noop());
     }
+    if !is_known_subcommand(&inv.subcommand) {
+        return Ok(Output::stderr_line(
+            &format!("unknown command: {}", inv.subcommand),
+            1,
+        ));
+    }
     let runner = RealRunner::new();
-    let client = Client::new(&runner);
-    let ctx = Ctx::from_env();
+    let session = crate::session::resolve_session(&runner, crate::env::session_name())?;
+    let client = Client::new(&runner, session.clone());
+    let ctx = Ctx::new(session, crate::env::current_pane_int());
     route(inv, &client, &ctx)
 }
 

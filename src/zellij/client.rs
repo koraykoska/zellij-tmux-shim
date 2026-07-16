@@ -129,25 +129,36 @@ fn debug_log(args: &[&str], out: &RunOutput) {
 
 pub struct Client<'r> {
     runner: &'r dyn ZellijRunner,
+    session: String,
 }
 
 impl<'r> Client<'r> {
     #[must_use]
-    pub fn new(runner: &'r dyn ZellijRunner) -> Self {
-        Self { runner }
+    pub fn new(runner: &'r dyn ZellijRunner, session: String) -> Self {
+        Self { runner, session }
     }
 
     pub fn list_panes(&self) -> Result<Vec<PaneInfo>> {
-        let out = self
-            .runner
-            .run(&["action", "list-panes", "--all", "--json"])?;
+        let out = self.runner.run(&[
+            "--session",
+            &self.session,
+            "action",
+            "list-panes",
+            "--all",
+            "--json",
+        ])?;
         serde_json::from_str(&out.stdout).map_err(Into::into)
     }
 
     pub fn list_tabs(&self) -> Result<Vec<TabInfo>> {
-        let out = self
-            .runner
-            .run(&["action", "list-tabs", "--all", "--json"])?;
+        let out = self.runner.run(&[
+            "--session",
+            &self.session,
+            "action",
+            "list-tabs",
+            "--all",
+            "--json",
+        ])?;
         serde_json::from_str(&out.stdout).map_err(Into::into)
     }
 
@@ -191,14 +202,20 @@ impl<'r> Client<'r> {
     }
 
     pub fn dump_screen_full(&self, pane_id: &str) -> Result<String> {
-        let out = self
-            .runner
-            .run(&["action", "dump-screen", "--full", "--pane-id", pane_id])?;
+        let out = self.runner.run(&[
+            "--session",
+            &self.session,
+            "action",
+            "dump-screen",
+            "--full",
+            "--pane-id",
+            pane_id,
+        ])?;
         Ok(out.stdout)
     }
 
     pub fn new_pane(&self, extra: &[&str]) -> Result<i64> {
-        let mut args = vec!["action", "new-pane"];
+        let mut args = vec!["--session", &self.session, "action", "new-pane"];
         args.extend_from_slice(extra);
         let out = self.runner.run(&args)?;
         crate::idmap::pane_int_from_env(out.stdout.trim()).ok_or_else(|| {
@@ -218,7 +235,7 @@ impl<'r> Client<'r> {
     }
 
     pub fn new_tab(&self, extra: &[&str]) -> Result<i64> {
-        let mut args = vec!["action", "new-tab"];
+        let mut args = vec!["--session", &self.session, "action", "new-tab"];
         args.extend_from_slice(extra);
         let out = self.runner.run(&args)?;
         out.stdout.trim().parse::<i64>().map_err(|_| {
@@ -246,7 +263,7 @@ impl<'r> Client<'r> {
     }
 
     fn action(&self, tail: &[&str]) -> Result<()> {
-        let mut args = vec!["action"];
+        let mut args = vec!["--session", &self.session, "action"];
         args.extend_from_slice(tail);
         let out = self.runner.run(&args)?;
         if out.success {
@@ -304,6 +321,22 @@ impl FakeRunner {
         self.calls.borrow().clone()
     }
 
+    /// `last_call()` with a leading `["--session", <any>]` pair stripped — yields
+    /// the `["action", ...]` slice handlers expect, regardless of session.
+    pub fn last_action(&self) -> Vec<String> {
+        let call = self.last_call();
+        strip_session_prefix(&call).to_vec()
+    }
+
+    /// `all_calls()` with the same leading `--session` stripping applied to each.
+    pub fn all_actions(&self) -> Vec<Vec<String>> {
+        self.calls
+            .borrow()
+            .iter()
+            .map(|c| strip_session_prefix(c).to_vec())
+            .collect()
+    }
+
     fn resolve(&self, args: &[&str]) -> String {
         let joined = args.join(" ");
         self.routes
@@ -311,6 +344,18 @@ impl FakeRunner {
             .find(|(key, _)| joined.contains(key.as_str()))
             .map(|(_, value)| value.clone())
             .unwrap_or_default()
+    }
+}
+
+/// If `call` starts with `["--session", <any>, ...]`, return `&call[2..]`;
+/// otherwise return `call` unchanged. Test-only: lets handler assertions
+/// ignore the session prefix.
+#[cfg(test)]
+fn strip_session_prefix(call: &[String]) -> &[String] {
+    if call.len() >= 2 && call[0] == "--session" {
+        &call[2..]
+    } else {
+        call
     }
 }
 
@@ -339,59 +384,102 @@ mod tests {
             r#"[{"id":0,"is_plugin":false,"is_focused":true,"pane_x":0,"pane_y":0,
                 "pane_rows":24,"pane_columns":80,"tab_id":0,"tab_position":0}]"#,
         );
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         let panes = client.list_panes().unwrap();
         assert_eq!(panes.len(), 1);
         assert_eq!(
             fake.last_call(),
-            ["action", "list-panes", "--all", "--json"]
+            ["--session", "s", "action", "list-panes", "--all", "--json"]
         );
     }
 
     #[test]
     fn new_pane_parses_terminal_id() {
         let fake = FakeRunner::ok("terminal_7\n");
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         assert_eq!(client.new_pane(&["--direction", "right"]).unwrap(), 7);
         assert_eq!(
             fake.last_call(),
-            ["action", "new-pane", "--direction", "right"]
+            [
+                "--session",
+                "s",
+                "action",
+                "new-pane",
+                "--direction",
+                "right"
+            ]
         );
     }
 
     #[test]
     fn new_tab_parses_bare_int() {
         let fake = FakeRunner::ok("3\n");
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         assert_eq!(client.new_tab(&["--name", "omo:1"]).unwrap(), 3);
+        assert_eq!(
+            fake.last_call(),
+            ["--session", "s", "action", "new-tab", "--name", "omo:1"]
+        );
     }
 
     #[test]
     fn close_pane_targets_by_pane_id() {
         let fake = FakeRunner::ok("");
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         client.close_pane("terminal_2").unwrap();
         assert_eq!(
             fake.last_call(),
-            ["action", "close-pane", "--pane-id", "terminal_2"]
+            [
+                "--session",
+                "s",
+                "action",
+                "close-pane",
+                "--pane-id",
+                "terminal_2"
+            ]
         );
     }
 
     #[test]
     fn write_byte_renders_decimal() {
         let fake = FakeRunner::ok("");
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         client.write_byte("terminal_1", 3).unwrap();
         assert_eq!(
             fake.last_call(),
-            ["action", "write", "--pane-id", "terminal_1", "3"]
+            [
+                "--session",
+                "s",
+                "action",
+                "write",
+                "--pane-id",
+                "terminal_1",
+                "3"
+            ]
         );
     }
 
     #[test]
     fn failed_action_is_error() {
         let fake = FakeRunner::fail();
-        let client = Client::new(&fake);
+        let client = Client::new(&fake, "s".to_string());
         assert!(client.close_pane("terminal_9").is_err());
+    }
+
+    #[test]
+    fn every_action_is_session_scoped() {
+        let f = FakeRunner::routed(&[("list-panes", "[]"), ("close-pane", "")]);
+        let c = Client::new(&f, "mysess".to_string());
+        let _ = c.list_panes();
+        let _ = c.close_pane("terminal_1");
+        for call in f.all_calls() {
+            assert!(
+                call.len() >= 3
+                    && call[0] == "--session"
+                    && call[1] == "mysess"
+                    && call[2] == "action",
+                "expected call to be session-scoped, got {call:?}"
+            );
+        }
     }
 }

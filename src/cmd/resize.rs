@@ -176,7 +176,7 @@ mod tests {
     }
 
     fn resizes(f: &FakeRunner) -> Vec<Vec<String>> {
-        f.all_calls()
+        f.all_actions()
             .into_iter()
             .filter(|c| c.contains(&"resize".to_string()))
             .collect()
@@ -187,7 +187,7 @@ mod tests {
         let f = fake();
         handle(
             &inv(&["resize-pane", "-t", "%1", "-x", "120"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
@@ -210,11 +210,10 @@ mod tests {
         let f = fake();
         handle(
             &inv(&["resize-pane", "-t", "%1", "-L", "5"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        // 80 - 5 = 75 target < 80 current, so shrink (decrease) at the right border
         assert_eq!(
             resizes(&f)[0],
             [
@@ -233,11 +232,10 @@ mod tests {
         let f = fake();
         handle(
             &inv(&["resize-pane", "-t", "%1", "-y", "25%"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        // 25% of viewport 48 rows = 12 < 24 current, so shrink height (decrease down)
         assert_eq!(
             resizes(&f)[0],
             [
@@ -256,11 +254,11 @@ mod tests {
         let f = fake();
         handle(
             &inv(&["resize-pane", "-t", "%1", "-Z"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let calls = f.all_calls();
+        let calls = f.all_actions();
         assert!(calls
             .iter()
             .any(|c| c == &["action", "focus-pane-id", "terminal_1"]));

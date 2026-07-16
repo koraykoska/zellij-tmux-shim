@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn display_pane_and_window_geometry_positional() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["display", "-p", "-t", "%1", "#{pane_width},#{window_width}"]),
             &c,
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn display_falls_back_to_active_terminal_without_caller() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["display-message", "-p", "-F", "#{pane_current_command}"]),
             &c,
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn display_prefers_caller_pane_when_untargeted() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["display-message", "-p", "-F", "#{pane_current_command}"]),
             &c,
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn list_panes_emits_terminal_ids_only() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["list-panes", "-F", "#{pane_id}"]),
             &c,
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn list_windows_counts_panes_per_tab() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["list-windows", "-F", "#{window_id}:#{window_panes}"]),
             &c,
@@ -312,7 +312,7 @@ mod tests {
     fn has_session_present_and_absent() {
         let present = handle(
             &inv(&["has-session", "-t", "omo-agents-9"]),
-            &Client::new(&fake()),
+            &Client::new(&fake(), "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
@@ -320,7 +320,7 @@ mod tests {
         assert!(present.stderr.is_empty());
         let absent = handle(
             &inv(&["has-session", "-t", "nope"]),
-            &Client::new(&fake()),
+            &Client::new(&fake(), "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
@@ -332,7 +332,7 @@ mod tests {
     fn has_session_matches_base_session_name() {
         let out = handle(
             &inv(&["has-session", "-t", "base"]),
-            &Client::new(&fake()),
+            &Client::new(&fake(), "s".to_string()),
             &Ctx::test("base"),
         )
         .unwrap();
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn list_sessions_includes_base_and_namespaces() {
         let f = fake();
-        let c = Client::new(&f);
+        let c = Client::new(&f, "s".to_string());
         let out = handle(
             &inv(&["list-sessions", "-F", "#{session_name}"]),
             &c,

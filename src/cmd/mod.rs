@@ -78,10 +78,10 @@ pub struct Ctx {
 
 impl Ctx {
     #[must_use]
-    pub fn from_env() -> Self {
+    pub fn new(session: String, current_pane: Option<i64>) -> Self {
         Self {
-            session: crate::env::session_name().unwrap_or_else(|| "zellij".to_string()),
-            current_pane: crate::env::current_pane_int(),
+            session,
+            current_pane,
         }
     }
 

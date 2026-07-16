@@ -85,11 +85,11 @@ mod tests {
         let f = FakeRunner::ok("");
         handle(
             &inv(&["send-keys", "-t", "%1", "echo hi", "Enter"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let calls = f.all_calls();
+        let calls = f.all_actions();
         assert_eq!(
             calls[0],
             [
@@ -111,12 +111,12 @@ mod tests {
         let f = FakeRunner::ok("");
         handle(
             &inv(&["send-keys", "-t", "%1", "C-c"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         assert_eq!(
-            f.last_call(),
+            f.last_action(),
             ["action", "write", "--pane-id", "terminal_1", "3"]
         );
     }
@@ -126,12 +126,12 @@ mod tests {
         let f = FakeRunner::ok("");
         handle(
             &inv(&["select-pane", "-t", "%2", "-T", "omo-sub"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         assert_eq!(
-            f.last_call(),
+            f.last_action(),
             [
                 "action",
                 "rename-pane",
@@ -144,11 +144,11 @@ mod tests {
         let g = FakeRunner::ok("");
         handle(
             &inv(&["select-pane", "-t", "%2"]),
-            &Client::new(&g),
+            &Client::new(&g, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        assert_eq!(g.last_call(), ["action", "focus-pane-id", "terminal_2"]);
+        assert_eq!(g.last_action(), ["action", "focus-pane-id", "terminal_2"]);
     }
 
     #[test]

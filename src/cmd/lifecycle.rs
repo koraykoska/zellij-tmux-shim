@@ -268,13 +268,13 @@ mod tests {
         let f = FakeRunner::ok("terminal_7\n");
         let out = handle(
             &inv(&["split-window", "-h", "-P", "-F", "#{pane_id}"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         assert_eq!(out.stdout, b"%7\n");
         assert_eq!(
-            f.last_call(),
+            f.last_action(),
             ["action", "new-pane", "--direction", "right"]
         );
     }
@@ -294,11 +294,11 @@ mod tests {
                 "run",
                 "me",
             ]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let call = f.last_call();
+        let call = f.last_action();
         assert_eq!(
             &call[..5],
             ["action", "new-pane", "--direction", "down", "--cwd"]
@@ -320,11 +320,11 @@ mod tests {
                 "-F",
                 "#{pane_id}",
             ]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let call = f.last_call();
+        let call = f.last_action();
         assert_eq!(
             &call[..7],
             [
@@ -345,11 +345,11 @@ mod tests {
         let f = FakeRunner::ok("terminal_9\n");
         handle(
             &inv(&["split-window", "-h", "echo hello world"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let call = f.last_call();
+        let call = f.last_action();
         assert_eq!(
             &call[call.len() - 4..],
             ["--", "/bin/sh", "-c", "echo hello world"]
@@ -368,12 +368,12 @@ mod tests {
                 "sub",
                 "opencode attach http://x --dir /p",
             ]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         let new_tab = f
-            .all_calls()
+            .all_actions()
             .into_iter()
             .find(|c| c.contains(&"new-tab".to_string()))
             .unwrap();
@@ -388,11 +388,11 @@ mod tests {
         let f = FakeRunner::ok("terminal_7\n");
         handle(
             &inv(&["split-window", "-h", "-t", "%1", "-P", "-F", "#{pane_id}"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let calls = f.all_calls();
+        let calls = f.all_actions();
         assert_eq!(calls[0], ["action", "focus-pane-id", "terminal_1"]);
         assert_eq!(calls[1], ["action", "new-pane", "--direction", "right"]);
     }
@@ -404,12 +404,15 @@ mod tests {
         let f = FakeRunner::routed(&[("new-tab", "3\n"), ("list-panes", panes)]);
         let out = handle(
             &inv(&["new-session", "-d", "-s", "omo-1", "-P", "-F", "#{pane_id}"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         assert_eq!(out.stdout, b"%5\n");
-        assert_eq!(f.all_calls()[0], ["action", "new-tab", "--name", "omo-1:1"]);
+        assert_eq!(
+            f.all_actions()[0],
+            ["action", "new-tab", "--name", "omo-1:1"]
+        );
     }
 
     #[test]
@@ -419,23 +422,23 @@ mod tests {
         let f = FakeRunner::routed(&[("list-panes", panes), ("close-pane", "")]);
         handle(
             &inv(&["kill-pane", "-t", "%3"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         assert_eq!(
-            f.last_call(),
+            f.last_action(),
             ["action", "close-pane", "--pane-id", "terminal_3"]
         );
 
         let g = FakeRunner::ok("");
         handle(
             &inv(&["select-window", "-t", "@4"]),
-            &Client::new(&g),
+            &Client::new(&g, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        assert_eq!(g.last_call(), ["action", "go-to-tab-by-id", "4"]);
+        assert_eq!(g.last_action(), ["action", "go-to-tab-by-id", "4"]);
     }
 
     #[test]
@@ -445,7 +448,7 @@ mod tests {
         let f = FakeRunner::routed(&[("list-panes", panes)]);
         let out = handle(
             &inv(&["kill-pane", "-t", "%9"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
@@ -464,11 +467,11 @@ mod tests {
         ]);
         handle(
             &inv(&["respawn-pane", "-t", "%3"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
-        let calls = f.all_calls();
+        let calls = f.all_actions();
         assert!(calls
             .iter()
             .any(|c| c == &["action", "focus-pane-id", "terminal_3"]));
@@ -490,12 +493,12 @@ mod tests {
         let f = FakeRunner::routed(&[("list-tabs", tabs), ("close-tab-by-id", "")]);
         handle(
             &inv(&["kill-session", "-t", "omo-9"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         let closes = f
-            .all_calls()
+            .all_actions()
             .into_iter()
             .filter(|c| c.contains(&"close-tab-by-id".to_string()))
             .count();
@@ -517,12 +520,12 @@ mod tests {
         ]);
         handle(
             &inv(&["new-window", "-t", "s", "-P", "-F", "#{pane_id}"]),
-            &Client::new(&f),
+            &Client::new(&f, "s".to_string()),
             &Ctx::test("s"),
         )
         .unwrap();
         let new_tab = f
-            .all_calls()
+            .all_actions()
             .into_iter()
             .find(|c| c.contains(&"new-tab".to_string()))
             .unwrap();
