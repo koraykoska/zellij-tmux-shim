@@ -13,6 +13,7 @@ pub mod env;
 pub mod error;
 pub mod format;
 pub mod idmap;
+pub mod session;
 pub mod zellij;
 
 use std::process::ExitCode;
